@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Fondo rojo oscuro circular/suave -->
+    <path
+        android:fillColor="#B71C1C"
+        android:pathData="M54,4 C26.38,4 4,26.38 4,54 C4,81.62 26.38,104 54,104 C81.62,104 104,81.62 104,54 C104,26.38 81.62,4 54,4 Z" />
+    
+    <!-- Escudo Rojo Emergencia brillante -->
+    <path
+        android:fillColor="#D32F2F"
+        android:pathData="M54,14 L86,26 C86,58 54,90 54,90 C54,90 22,58 22,26 Z" />
+    
+    <!-- Borde interior dorado suave del escudo -->
+    <path
+        android:strokeColor="#FFCDD2"
+        android:strokeWidth="2"
+        android:pathData="M54,18 L82,28 C82,54 54,84 54,84 C54,84 26,54 26,28 Z" />
+
+    <!-- Letra 'O' en color Blanco brillante -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,34 C44.06,34 36,41.16 36,50 C36,58.84 44.06,66 54,66 C63.94,66 72,58.84 72,50 C72,41.16 63.94,34 54,34 Z M54,42 C58.97,42 63,45.58 63,50 C63,54.42 58.97,58 54,58 C49.03,58 45,54.42 45,50 C45,45.58 49.03,42 54,42 Z" />
+</vector>
