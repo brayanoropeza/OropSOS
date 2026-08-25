@@ -23,11 +23,11 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Coffee
-import androidx.compose.material.icons.filled.ContactPhone
-import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Message
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
@@ -405,7 +405,7 @@ fun VictimScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.ContactPhone,
+                                imageVector = Icons.Default.Phone,
                                 contentDescription = null,
                                 tint = Color(0xFF25D366),
                                 modifier = Modifier.size(18.dp)
@@ -425,7 +425,7 @@ fun VictimScreen(
                                 modifier = Modifier.size(26.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Contacts,
+                                    imageVector = Icons.Default.Person,
                                     contentDescription = "Importar Agenda",
                                     tint = Color(0xFF25D366),
                                     modifier = Modifier.size(18.dp)
@@ -451,7 +451,7 @@ fun VictimScreen(
 
                     if (savedContacts.isEmpty()) {
                         Text(
-                            text = "Toca el icono de agenda 📇 para importar contactos de tu celular y enviarles WhatsApp + SMS con tu GPS.",
+                            text = "Toca el icono de agenda para importar contactos de tu celular y enviarles WhatsApp + SMS con tu GPS.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline,
                             modifier = Modifier.padding(top = 4.dp)
