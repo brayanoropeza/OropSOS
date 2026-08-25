@@ -42,7 +42,7 @@ fun RescuerScreen(
     val detectedVictims by scanner.detectedVictims.collectAsState()
 
     var isScanning by remember { mutableStateOf(false) }
-    var selectedMaterial by remember { mutableStateOf(BuildingMaterial.CONCRETE) }
+    val defaultMaterial = BuildingMaterial.CONCRETE
     var selectedVictimFor3d by remember { mutableStateOf<VictimSignal?>(null) }
 
     // Iniciar escucha de brújula y rastreador sonoro continuo de fondo en silencio visual
@@ -61,10 +61,10 @@ fun RescuerScreen(
         if (detectedVictims.isNotEmpty()) {
             val closest = detectedVictims.first()
             selectedVictimFor3d = closest
-            audioTracker.updateRssiAndMaterial(closest.rssi, selectedMaterial)
+            audioTracker.updateRssiAndMaterial(closest.rssi, defaultMaterial)
         } else {
             selectedVictimFor3d = null
-            audioTracker.updateRssiAndMaterial(-95, selectedMaterial)
+            audioTracker.updateRssiAndMaterial(-95, defaultMaterial)
         }
     }
 
@@ -114,34 +114,11 @@ fun RescuerScreen(
         // Visualizador Radar 3D con ubicación al instante
         Radar3DVisualizer(
             victimSignal = selectedVictimFor3d ?: detectedVictims.firstOrNull(),
-            selectedMaterial = selectedMaterial,
+            selectedMaterial = defaultMaterial,
             compassAzimuth = compassAzimuth
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Selector de Material de Escombros (Compacto y Elegante)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BuildingMaterial.values().forEach { material ->
-                FilterChip(
-                    selected = selectedMaterial == material,
-                    onClick = {
-                        selectedMaterial = material
-                        selectedVictimFor3d?.let { victim ->
-                            audioTracker.updateRssiAndMaterial(victim.rssi, material)
-                        }
-                    },
-                    label = { Text(material.displayName.split(" ")[0], fontSize = 11.sp) },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Controles de Escaneo BLE
         Button(
@@ -167,14 +144,14 @@ fun RescuerScreen(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(44.dp)
+                .height(46.dp)
         ) {
             Icon(
                 imageVector = if (isScanning) Icons.Default.CellTower else Icons.Default.PersonSearch,
                 contentDescription = null
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(if (isScanning) "DETENER ESCANEO" else "INICIAR BÚSQUEDA SOS")
+            Text(if (isScanning) "DETENER ESCANEO" else "INICIAR BÚSQUEDA SOS", fontWeight = FontWeight.Bold)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -204,7 +181,7 @@ fun RescuerScreen(
                         isSelected = selectedVictimFor3d?.victimId == victim.victimId,
                         onSelect = {
                             selectedVictimFor3d = victim
-                            audioTracker.updateRssiAndMaterial(victim.rssi, selectedMaterial)
+                            audioTracker.updateRssiAndMaterial(victim.rssi, defaultMaterial)
                         }
                     )
                 }

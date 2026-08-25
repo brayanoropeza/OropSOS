@@ -60,8 +60,7 @@ class BleAdvertiser(private val context: Context) {
     }
 
     /**
-     * Comprime el ID de la víctima y las coordenadas GPS en un buffer binario de 16 bytes
-     * para no superar el límite estricto de 31 bytes del paquete BLE primario.
+     * Comprime el ID de la víctima y las coordenadas GPS en un buffer binario de 16 bytes.
      */
     private fun createCompactPayload(victimId: String, gpsCoords: String): ByteArray {
         val cleanId = victimId.take(8).padEnd(8, ' ')
@@ -98,17 +97,24 @@ class BleAdvertiser(private val context: Context) {
             return
         }
 
+        try {
+            // Asignar nombre local de transmisión SOS visible a cualquier escáner de radio
+            adapter.name = "SOS_VICTIMA"
+        } catch (e: Exception) {
+            // Manejo seguro
+        }
+
         advertiser = adapter.bluetoothLeAdvertiser
         if (advertiser == null) {
             onStatusChanged(false, "No se pudo obtener el BluetoothLeAdvertiser.")
             return
         }
 
-        // Configuración de emisión de MÁXIMA FRECUENCIA Y POTENCIA
+        // Configuración de emisión en MÁXIMA FRECUENCIA Y MÁXIMA POTENCIA DE RADIO (100mW)
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .setConnectable(true) // Habilita compatibilidad universal con todos los chips BLE
+            .setConnectable(true)
             .setTimeout(0)
             .build()
 
@@ -116,10 +122,10 @@ class BleAdvertiser(private val context: Context) {
         val gpsCoords = locationHelper.getLastKnownLocation()
         val compactPayload = createCompactPayload(victimId, gpsCoords)
 
-        // Paquete principal optimizado (menor a 31 bytes)
+        // Paquete principal optimizado con inclusión de nombre de dispositivo
         val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(false)
-            .setIncludeTxPowerLevel(false)
+            .setIncludeDeviceName(true)
+            .setIncludeTxPowerLevel(true)
             .addServiceUuid(SOS_SERVICE_UUID)
             .addManufacturerData(MANUFACTURER_ID, compactPayload)
             .build()

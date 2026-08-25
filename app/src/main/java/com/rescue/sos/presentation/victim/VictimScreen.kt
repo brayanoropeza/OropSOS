@@ -12,9 +12,9 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatterySaver
@@ -71,6 +71,7 @@ fun VictimScreen(
     val batteryHelper = remember { BatteryOptimizationHelper(context) }
     val locationHelper = remember { LocationHelper(context) }
     val contactsManager = remember { EmergencyContactsManager(context) }
+    val scrollState = rememberScrollState()
 
     var isSosActive by remember { mutableStateOf(false) }
     var isBluetoothEnabled by remember { mutableStateOf(advertiser.isBluetoothEnabled()) }
@@ -219,12 +220,14 @@ fun VictimScreen(
         }
     }
 
+    // Contenedor principal con verticalScroll para adaptarse dinámicamente a celulares pequeños
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .verticalScroll(scrollState)
+            .padding(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Banner de Alerta Sísmica Activa (si hay alerta)
         activeSasmexAlert?.let { alert ->
@@ -232,7 +235,7 @@ fun VictimScreen(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFD32F2F)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Text(
                         text = "🚨 ALERTA SÍSMICA DETECTADA (SASMEX / CIRES) 🚨",
                         color = Color.White,
@@ -246,7 +249,6 @@ fun VictimScreen(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(6.dp))
         }
 
         // Cabecera e Instrucciones
@@ -256,47 +258,56 @@ fun VictimScreen(
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(10.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Warning,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "MODO VÍCTIMA (EMISOR SOS + GPS)",
                             fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.titleSmall
                         )
                     }
 
                     // Botón para Donar / Modo Pro Desarrollador
-                    IconButton(onClick = { showDonateDialog = true }) {
+                    IconButton(
+                        onClick = { showDonateDialog = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
                         Icon(
                             imageVector = if (isProUser) Icons.Default.Star else Icons.Default.Coffee,
                             contentDescription = "Donar",
-                            tint = if (isProUser) Color(0xFFFFD54F) else Color(0xFFFFB74D)
+                            tint = if (isProUser) Color(0xFFFFD54F) else Color(0xFFFFB74D),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "ID: $victimId\nEmisión continua BLE con coordenadas GPS capturadas al temblar.",
-                    style = MaterialTheme.typography.bodySmall
+                    text = "ID: $victimId | Emisión continua BLE + GPS",
+                    style = MaterialTheme.typography.labelSmall
                 )
             }
         }
 
-        // Botón Gigante de SOS
+        // Botón Gigante de SOS con tamaño adaptativo responsive para pantallas pequeñas
         Box(
             modifier = Modifier
-                .size(190.dp)
+                .sizeIn(minWidth = 140.dp, minHeight = 140.dp, maxWidth = 170.dp, maxHeight = 170.dp)
+                .aspectRatio(1f)
                 .clip(CircleShape)
                 .background(buttonColor)
                 .clickable {
@@ -315,21 +326,24 @@ fun VictimScreen(
                     imageVector = Icons.Default.Sensors,
                     contentDescription = "SOS Icon",
                     tint = Color.White,
-                    modifier = Modifier.size(50.dp)
+                    modifier = Modifier.size(42.dp)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = if (isSosActive) "SOS ACTIVO\nTOCAR PARA DETENER" else "TRANSMITIR\nSOS",
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 16.sp,
+                    fontSize = 14.sp,
                     textAlign = TextAlign.Center
                 )
             }
         }
 
         // Controles de Hardware, Batería y Contactos
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             // Fila de Estados: Bluetooth y GPS
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -350,14 +364,15 @@ fun VictimScreen(
                             imageVector = if (isBluetoothEnabled) Icons.Default.CheckCircle else Icons.Default.Bluetooth,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = if (isBluetoothEnabled) "Bluetooth Activo" else "Bluetooth OFF",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = Color.White,
+                            fontSize = 11.sp
                         )
                     }
                 }
@@ -377,20 +392,19 @@ fun VictimScreen(
                             imageVector = if (isLocationEnabled) Icons.Default.CheckCircle else Icons.Default.LocationOn,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = if (isLocationEnabled) "GPS Listo" else "GPS Apagado",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = Color.White,
+                            fontSize = 11.sp
                         )
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
 
             // Sección de Contactos de Emergencia (Importar de la Agenda o Manual)
             Card(
@@ -422,7 +436,7 @@ fun VictimScreen(
                             // Botón de Importar directamente de la Agenda del Celular
                             IconButton(
                                 onClick = { openContactsPicker() },
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Person,
@@ -437,7 +451,7 @@ fun VictimScreen(
                             // Botón de Agregar Manualmente
                             IconButton(
                                 onClick = { showAddContactDialog = true },
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Add,
@@ -486,8 +500,6 @@ fun VictimScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
             // Exención de Optimización de Batería (SE MUESTRA ÚNICAMENTE SI NO SE HA CONCEDIDO)
             if (!isBatteryExempt) {
                 Card(
@@ -499,7 +511,7 @@ fun VictimScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(10.dp),
+                            .padding(8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -507,17 +519,17 @@ fun VictimScreen(
                             modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(imageVector = Icons.Default.BatterySaver, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(imageVector = Icons.Default.BatterySaver, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Column {
                                 Text(
                                     text = "Restricción de Batería Detectada",
                                     fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodySmall
+                                    fontSize = 11.sp
                                 )
                                 Text(
-                                    text = "Otorga el permiso para que el SOS no se apague en segundo plano.",
-                                    style = MaterialTheme.typography.labelSmall
+                                    text = "Otorga el permiso para mantener el SOS activo.",
+                                    fontSize = 10.sp
                                 )
                             }
                         }
@@ -527,13 +539,12 @@ fun VictimScreen(
                                 batteryHelper.requestIgnoreBatteryOptimizations()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                         ) {
-                            Text("ACTIVAR", fontSize = 11.sp)
+                            Text("ACTIVAR", fontSize = 10.sp)
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
             }
 
             // Card de SASMEX CIRES Alerta Sísmica México
@@ -577,15 +588,11 @@ fun VictimScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
             // Banner de Publicidad Google AdMob (Se oculta si es PRO o durante emergencia)
             BannerAdView(
                 isProUser = isProUser,
                 isEmergencyActive = isSosActive || activeSasmexAlert != null || show40sConfirmationDialog
             )
-
-            Spacer(modifier = Modifier.height(4.dp))
 
             // Créditos de Desarrollador con BOTÓN SECRETO (3 Taps para activar/desactivar anuncios)
             Surface(
