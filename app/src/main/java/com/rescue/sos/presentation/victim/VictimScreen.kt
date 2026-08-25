@@ -5,14 +5,20 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContactPhone
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
@@ -34,6 +40,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.rescue.sos.data.battery.BatteryOptimizationHelper
 import com.rescue.sos.data.ble.BleAdvertiser
+import com.rescue.sos.data.contacts.EmergencyContact
+import com.rescue.sos.data.contacts.EmergencyContactsManager
 import com.rescue.sos.data.location.LocationHelper
 import com.rescue.sos.data.network.SasmexAlertClient
 import com.rescue.sos.service.SosForegroundService
@@ -50,11 +58,18 @@ fun VictimScreen(
     val sasmexClient = remember { SasmexAlertClient(context) }
     val batteryHelper = remember { BatteryOptimizationHelper(context) }
     val locationHelper = remember { LocationHelper(context) }
+    val contactsManager = remember { EmergencyContactsManager(context) }
 
     var isSosActive by remember { mutableStateOf(false) }
     var isBluetoothEnabled by remember { mutableStateOf(advertiser.isBluetoothEnabled()) }
     var isLocationEnabled by remember { mutableStateOf(locationHelper.isLocationEnabled()) }
     var isBatteryExempt by remember { mutableStateOf(batteryHelper.isIgnoringBatteryOptimizations()) }
+
+    // Lista de Contactos de Emergencia
+    var savedContacts by remember { mutableStateOf(contactsManager.getContacts()) }
+    var showAddContactDialog by remember { mutableStateOf(false) }
+    var newContactName by remember { mutableStateOf("") }
+    var newContactPhone by remember { mutableStateOf("") }
 
     // Estado del Conteo Regresivo de 40 Segundos ("Estoy Bien")
     var show40sConfirmationDialog by remember { mutableStateOf(false) }
@@ -95,6 +110,18 @@ fun VictimScreen(
         }
     }
 
+    // Función auxiliar para iniciar SOS + Despacho de WhatsApp & SMS
+    val triggerFullEmergencySOS: () -> Unit = {
+        advertiser.enableBluetoothIfDisabled()
+        isBluetoothEnabled = true
+        isLocationEnabled = locationHelper.isLocationEnabled()
+        SosForegroundService.startService(context, victimId)
+        isSosActive = true
+        // Enviar alertas de WhatsApp y SMS a la red de contactos
+        contactsManager.dispatchEmergencyAlerts(victimId)
+        onStatusMessage("¡SOS ACTIVO + WHATSAPP Y SMS ENVIADOS CON GPS!")
+    }
+
     // Efecto de temporizador de 40 segundos para confirmar estado de salud
     LaunchedEffect(show40sConfirmationDialog) {
         if (show40sConfirmationDialog) {
@@ -103,14 +130,8 @@ fun VictimScreen(
                 countdownSeconds -= 1
             }
             if (show40sConfirmationDialog && countdownSeconds == 0) {
-                // Se agotó el tiempo: Activar transmisión de emergencia automática
                 show40sConfirmationDialog = false
-                advertiser.enableBluetoothIfDisabled()
-                isBluetoothEnabled = true
-                isLocationEnabled = locationHelper.isLocationEnabled()
-                SosForegroundService.startService(context, victimId)
-                isSosActive = true
-                onStatusMessage("¡TIEMPO AGOTADO SIN RESPUESTA! SOS BLE + GPS ACTIVADO AUTOMÁTICAMENTE")
+                triggerFullEmergencySOS()
             }
         }
     }
@@ -177,7 +198,7 @@ fun VictimScreen(
         // Botón Gigante de SOS
         Box(
             modifier = Modifier
-                .size(200.dp)
+                .size(190.dp)
                 .clip(CircleShape)
                 .background(buttonColor)
                 .clickable {
@@ -186,12 +207,7 @@ fun VictimScreen(
                         isSosActive = false
                         onStatusMessage("Señal SOS desactivada.")
                     } else {
-                        advertiser.enableBluetoothIfDisabled()
-                        isBluetoothEnabled = true
-                        isLocationEnabled = locationHelper.isLocationEnabled()
-                        SosForegroundService.startService(context, victimId)
-                        isSosActive = true
-                        onStatusMessage("¡BLUETOOTH + GPS CAPTURADO Y SOS ENVIÁNDOSE!")
+                        triggerFullEmergencySOS()
                     }
                 },
             contentAlignment = Alignment.Center
@@ -201,20 +217,20 @@ fun VictimScreen(
                     imageVector = Icons.Default.Sensors,
                     contentDescription = "SOS Icon",
                     tint = Color.White,
-                    modifier = Modifier.size(54.dp)
+                    modifier = Modifier.size(50.dp)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (isSosActive) "SOS ACTIVO\nTOCAR PARA DETENER" else "TRANSMITIR\nSOS",
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 17.sp,
+                    fontSize = 16.sp,
                     textAlign = TextAlign.Center
                 )
             }
         }
 
-        // Controles de Hardware, Batería y Créditos
+        // Controles de Hardware, Batería y Contactos
         Column(modifier = Modifier.fillMaxWidth()) {
             // Fila de Estados: Bluetooth y GPS
             Row(
@@ -272,6 +288,79 @@ fun VictimScreen(
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Seccion de Contactos de Emergencia (WhatsApp & SMS)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.ContactPhone,
+                                contentDescription = null,
+                                tint = Color(0xFF25D366),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Contactos de Emergencia (WhatsApp / SMS)",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { showAddContactDialog = true },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "Añadir", tint = Color(0xFF25D366))
+                        }
+                    }
+
+                    if (savedContacts.isEmpty()) {
+                        Text(
+                            text = "Añade números de familiares para enviarles WhatsApp + SMS con tu GPS al temblar.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    } else {
+                        Column(modifier = Modifier.padding(top = 4.dp)) {
+                            savedContacts.forEachIndexed { index, contact ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "• ${contact.name} (${contact.phone})",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            contactsManager.removeContact(index)
+                                            savedContacts = contactsManager.getContacts()
+                                        },
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Borrar", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -345,7 +434,7 @@ fun VictimScreen(
                             style = MaterialTheme.typography.bodySmall
                         )
                         Text(
-                            text = "Temporizador 40s + Auto-SOS + GPS al temblar",
+                            text = "Temporizador 40s + Auto-SOS + GPS + WhatsApp",
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
@@ -404,6 +493,54 @@ fun VictimScreen(
         }
     }
 
+    // Modal para Agregar Contacto de Emergencia
+    if (showAddContactDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddContactDialog = false },
+            title = { Text("Añadir Contacto de Emergencia", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newContactName,
+                        onValueChange = { newContactName = it },
+                        label = { Text("Nombre del Familiar") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newContactPhone,
+                        onValueChange = { newContactPhone = it },
+                        label = { Text("Número de Teléfono (Con LADA/WhatsApp)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newContactName.isNotBlank() && newContactPhone.isNotBlank()) {
+                            contactsManager.addContact(newContactName, newContactPhone)
+                            savedContacts = contactsManager.getContacts()
+                            newContactName = ""
+                            newContactPhone = ""
+                            showAddContactDialog = false
+                            onStatusMessage("Contacto de emergencia guardado.")
+                        }
+                    }
+                ) {
+                    Text("GUARDAR")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddContactDialog = false }) {
+                    Text("CANCELAR")
+                }
+            }
+        )
+    }
+
     // Modal de Confirmación de Seguridad de 40 Segundos ("Estoy Bien")
     if (show40sConfirmationDialog) {
         Dialog(
@@ -438,7 +575,7 @@ fun VictimScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Confirmación de Estado de Salud:\nSe transmitirá señal SOS en:",
+                        text = "Confirmación de Estado de Salud:\nSe transmitirá SOS + WhatsApp/SMS en:",
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f)
@@ -474,7 +611,7 @@ fun VictimScreen(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
-                        text = "Si no respondes en $countdownSeconds segundos, OropSOS activará el beacon de rescate automáticamente.",
+                        text = "Si no respondes en $countdownSeconds segundos, OropSOS activará el beacon de rescate y notificará a tus familiares.",
                         fontSize = 11.sp,
                         textAlign = TextAlign.Center,
                         color = Color.Gray
