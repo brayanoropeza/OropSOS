@@ -2,29 +2,31 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permisos de Bluetooth para Android 12+ (API 31+) -->
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <!-- Permisos de Bluetooth para Android 12, 14, 15, 16 y 17+ -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" tools:targetApi="31" />
 
-    <!-- Permisos de Ubicación requeridos para escaneo BLE en algunas versiones -->
+    <!-- Permisos de Ubicación requeridos para escaneo BLE -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Permisos de Foreground Service para Android 14+ (API 34/35) -->
+    <!-- Permisos de Foreground Service para Android 14, 15, 16 y 17+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
-    <!-- Permisos de Red para Alerta Sísmica SASMEX/CIRES -->
+    <!-- Permisos de Red para Alerta Sísmica SASMEX/CIRES/USGS -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Notificaciones en Android 13+ (API 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Sensores, Hardware, SMS y Optimización de Batería -->
+    <!-- Sensores, Hardware, SMS, Contactos y Optimización de Batería -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -57,7 +59,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Foreground Service para mantener el SOS activo en Android 14/15+ -->
+        <!-- Foreground Service para mantener el SOS activo en Android 14, 15, 16 y 17+ -->
         <service
             android:name=".service.SosForegroundService"
             android:enabled="true"

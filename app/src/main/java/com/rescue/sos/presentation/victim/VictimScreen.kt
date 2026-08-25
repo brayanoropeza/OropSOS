@@ -1,8 +1,13 @@
 package com.rescue.sos.presentation.victim
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.ContactsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +24,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.ContactPhone
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Message
@@ -40,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.rescue.sos.data.battery.BatteryOptimizationHelper
@@ -86,6 +93,72 @@ fun VictimScreen(
     var countdownSeconds by remember { mutableIntStateOf(40) }
 
     val activeSasmexAlert by sasmexClient.currentAlert.collectAsState()
+
+    // Selector de Contacto de la Agenda del Sistema
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickContact()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val cursor = context.contentResolver.query(uri, null, null, null, null)
+                cursor?.use { c ->
+                    if (c.moveToFirst()) {
+                        val nameIndex = c.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
+                        val idIndex = c.getColumnIndex(ContactsContract.Contacts._ID)
+                        val hasPhoneIndex = c.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
+
+                        val name = if (nameIndex >= 0) c.getString(nameIndex) else "Familiar SOS"
+                        val contactId = if (idIndex >= 0) c.getString(idIndex) else ""
+                        val hasPhone = if (hasPhoneIndex >= 0) c.getInt(hasPhoneIndex) else 0
+
+                        if (hasPhone > 0 && contactId.isNotEmpty()) {
+                            val phoneCursor = context.contentResolver.query(
+                                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                                null,
+                                "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
+                                arrayOf(contactId),
+                                null
+                            )
+                            phoneCursor?.use { pc ->
+                                if (pc.moveToFirst()) {
+                                    val numberIndex = pc.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                                    if (numberIndex >= 0) {
+                                        val rawPhone = pc.getString(numberIndex)
+                                        val cleanPhone = rawPhone.replace(Regex("[^0-9+]"), "")
+                                        contactsManager.addContact(name, cleanPhone)
+                                        savedContacts = contactsManager.getContacts()
+                                        onStatusMessage("Contacto '$name' ($cleanPhone) importado de la agenda.")
+                                    }
+                                }
+                            }
+                        } else {
+                            onStatusMessage("El contacto seleccionado no tiene un número telefónico.")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                onStatusMessage("Error al leer contacto: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    val requestContactsPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            contactPickerLauncher.launch(null)
+        } else {
+            onStatusMessage("Permiso para leer contactos denegado.")
+        }
+    }
+
+    val openContactsPicker: () -> Unit = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            contactPickerLauncher.launch(null)
+        } else {
+            requestContactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        }
+    }
 
     // Escuchar el ciclo de vida (ON_RESUME) para refrescar estados al volver de Ajustes de Android 15+
     DisposableEffect(lifecycleOwner) {
@@ -319,7 +392,7 @@ fun VictimScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Seccion de Contactos de Emergencia (WhatsApp & SMS)
+            // Sección de Contactos de Emergencia (Importar de la Agenda o Manual)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -339,23 +412,46 @@ fun VictimScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Contactos de Emergencia (WhatsApp / SMS)",
+                                text = "Contactos (WhatsApp / SMS)",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
 
-                        IconButton(
-                            onClick = { showAddContactDialog = true },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = "Añadir", tint = Color(0xFF25D366))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Botón de Importar directamente de la Agenda del Celular
+                            IconButton(
+                                onClick = { openContactsPicker() },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Contacts,
+                                    contentDescription = "Importar Agenda",
+                                    tint = Color(0xFF25D366),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
+                            // Botón de Agregar Manualmente
+                            IconButton(
+                                onClick = { showAddContactDialog = true },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Añadir Manual",
+                                    tint = Color(0xFF25D366),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
 
                     if (savedContacts.isEmpty()) {
                         Text(
-                            text = "Añade números de familiares para enviarles WhatsApp + SMS con tu GPS al temblar.",
+                            text = "Toca el icono de agenda 📇 para importar contactos de tu celular y enviarles WhatsApp + SMS con tu GPS.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline,
                             modifier = Modifier.padding(top = 4.dp)
@@ -598,7 +694,7 @@ fun VictimScreen(
         )
     }
 
-    // Modal para Agregar Contacto de Emergencia
+    // Modal para Agregar Contacto de Emergencia Manualmente
     if (showAddContactDialog) {
         AlertDialog(
             onDismissRequest = { showAddContactDialog = false },

@@ -5,7 +5,6 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
@@ -48,14 +47,11 @@ class BleScanner(private val context: Context) {
             return
         }
 
-        val filters = listOf(
-            ScanFilter.Builder()
-                .setServiceUuid(BleAdvertiser.SOS_SERVICE_UUID)
-                .build()
-        )
-
+        // Ajuste de escaneo agresivo para máxima compatibilidad entre todas las marcas de Android
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
             .build()
 
         stopScan()
@@ -64,31 +60,38 @@ class BleScanner(private val context: Context) {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 super.onScanResult(callbackType, result)
                 val record = result.scanRecord ?: return
-                val serviceData = record.getServiceData(BleAdvertiser.SOS_SERVICE_UUID)
 
-                var victimId = result.device.address ?: "VICTIMA_DESCONOCIDA"
+                // Inspeccionar si el paquete contiene nuestro UUID de socorro SOS
+                val serviceData = record.getServiceData(BleAdvertiser.SOS_SERVICE_UUID)
+                val hasSosUuid = record.serviceUuids?.contains(BleAdvertiser.SOS_SERVICE_UUID) == true || serviceData != null
+
+                var victimId: String? = null
                 var locationCoords = "SIN_GPS"
 
                 if (serviceData != null && serviceData.isNotEmpty()) {
                     val fullPayload = String(serviceData, Charsets.UTF_8)
                     if (fullPayload.contains("|")) {
                         val parts = fullPayload.split("|")
-                        victimId = parts.getOrNull(0) ?: victimId
+                        victimId = parts.getOrNull(0)
                         locationCoords = parts.getOrNull(1) ?: "SIN_GPS"
                     } else {
                         victimId = fullPayload
                     }
+                } else if (hasSosUuid || (record.deviceName != null && record.deviceName.contains("VICTIMA"))) {
+                    victimId = record.deviceName ?: "VICTIMA_${result.device.address.takeLast(5).replace(":", "")}"
                 }
 
-                val signal = VictimSignal(
-                    victimId = victimId,
-                    rssi = result.rssi,
-                    timestamp = System.currentTimeMillis(),
-                    locationCoordinates = locationCoords
-                )
+                if (victimId != null) {
+                    val signal = VictimSignal(
+                        victimId = victimId,
+                        rssi = result.rssi,
+                        timestamp = System.currentTimeMillis(),
+                        locationCoordinates = locationCoords
+                    )
 
-                victimMap[victimId] = signal
-                _detectedVictims.value = victimMap.values.sortedByDescending { it.rssi }
+                    victimMap[victimId] = signal
+                    _detectedVictims.value = victimMap.values.sortedByDescending { it.rssi }
+                }
             }
 
             override fun onScanFailed(errorCode: Int) {
@@ -100,7 +103,8 @@ class BleScanner(private val context: Context) {
         }
 
         try {
-            scanner?.startScan(filters, settings, scanCallback)
+            // Escaneo sin filtro de hardware estricto para evitar bloqueos de chipsets
+            scanner?.startScan(null, settings, scanCallback)
             isScanning = true
             onStatusChanged(true, null)
         } catch (e: SecurityException) {

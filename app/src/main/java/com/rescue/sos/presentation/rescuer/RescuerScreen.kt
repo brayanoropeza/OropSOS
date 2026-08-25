@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,7 +45,7 @@ fun RescuerScreen(
     var selectedMaterial by remember { mutableStateOf(BuildingMaterial.CONCRETE) }
     var selectedVictimFor3d by remember { mutableStateOf<VictimSignal?>(null) }
 
-    // Iniciar escucha de brújula y rastreador sonoro continuo
+    // Iniciar escucha de brújula y rastreador sonoro continuo de fondo en silencio visual
     DisposableEffect(Unit) {
         audioTracker.startTracking()
         compassHelper.startListening()
@@ -57,7 +56,7 @@ fun RescuerScreen(
         }
     }
 
-    // Actualizar víctima seleccionada y tono de audio automáticamente al detectar señales
+    // Actualizar víctima seleccionada y posición en el Radar 3D al instante al detectar señales
     LaunchedEffect(detectedVictims) {
         if (detectedVictims.isNotEmpty()) {
             val closest = detectedVictims.first()
@@ -88,12 +87,12 @@ fun RescuerScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "MODO RESCATISTA (RADAR 3D + BRÚJULA)",
+                        text = "MODO RESCATISTA (RADAR 3D)",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = "Orientación por brújula magnética, audio continuo y visor Maps 3D.",
+                        text = "Visualización 3D instantánea por brújula y mapas satelitales.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -112,69 +111,37 @@ fun RescuerScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Visualizador Radar 3D con orientación por brújula
+        // Visualizador Radar 3D con ubicación al instante
         Radar3DVisualizer(
             victimSignal = selectedVictimFor3d ?: detectedVictims.firstOrNull(),
             selectedMaterial = selectedMaterial,
             compassAzimuth = compassAzimuth
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Selector de Material de Escombros
-        Card(
+        // Selector de Material de Escombros (Compacto y Elegante)
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.padding(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.VolumeUp,
-                        contentDescription = null,
-                        tint = Color(0xFF00E676),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Audio Detector de Metales: ACTIVADO",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF00E676)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = "Atenuación por Material de Escombros:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+            BuildingMaterial.values().forEach { material ->
+                FilterChip(
+                    selected = selectedMaterial == material,
+                    onClick = {
+                        selectedMaterial = material
+                        selectedVictimFor3d?.let { victim ->
+                            audioTracker.updateRssiAndMaterial(victim.rssi, material)
+                        }
+                    },
+                    label = { Text(material.displayName.split(" ")[0], fontSize = 11.sp) },
+                    modifier = Modifier.weight(1f)
                 )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    BuildingMaterial.values().forEach { material ->
-                        FilterChip(
-                            selected = selectedMaterial == material,
-                            onClick = {
-                                selectedMaterial = material
-                                selectedVictimFor3d?.let { victim ->
-                                    audioTracker.updateRssiAndMaterial(victim.rssi, material)
-                                }
-                            },
-                            label = { Text(material.displayName.split(" ")[0], fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Controles de Escaneo BLE
         Button(
@@ -187,7 +154,7 @@ fun RescuerScreen(
                     scanner.startScan { success, error ->
                         if (success) {
                             isScanning = true
-                            onStatusMessage("Escaneo BLE activo...")
+                            onStatusMessage("Escaneo BLE de alta frecuencia activo...")
                         } else {
                             isScanning = false
                             onStatusMessage(error ?: "Error al escanear")
@@ -221,7 +188,7 @@ fun RescuerScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isScanning) "Buscando señales SOS en el radar 3D..." else "Pulse 'INICIAR BÚSQUEDA SOS' para activar el sonar.",
+                    text = if (isScanning) "Buscando señales SOS en el radar 3D..." else "Pulse 'INICIAR BÚSQUEDA SOS' para rastrear dispositivos.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall
                 )

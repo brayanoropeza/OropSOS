@@ -67,7 +67,7 @@ class BleAdvertiser(private val context: Context) {
 
         if (!adapter.isEnabled) {
             enableBluetoothIfDisabled()
-            Thread.sleep(1000)
+            Thread.sleep(800)
         }
 
         if (!adapter.isMultipleAdvertisementSupported) {
@@ -81,8 +81,9 @@ class BleAdvertiser(private val context: Context) {
             return
         }
 
+        // Configuración de emisión en MÁXIMA FRECUENCIA Y POTENCIA (LOW_LATENCY)
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
             .setConnectable(false)
             .setTimeout(0)
