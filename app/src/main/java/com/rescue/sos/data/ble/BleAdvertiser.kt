@@ -2,6 +2,9 @@ package com.rescue.sos.data.ble
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattServerCallback
+import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
@@ -17,6 +20,7 @@ class BleAdvertiser(private val context: Context) {
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? get() = bluetoothManager?.adapter
     private var advertiser: BluetoothLeAdvertiser? = null
+    private var gattServer: BluetoothGattServer? = null
     private val locationHelper = LocationHelper(context)
 
     private var advertiseCallback: AdvertiseCallback? = null
@@ -72,31 +76,49 @@ class BleAdvertiser(private val context: Context) {
             } catch (e: Exception) {}
         }
 
-        // Obtener el transmisor BLE directamente del adaptador (sin bloqueo por isMultipleAdvertisementSupported)
+        // 1. Iniciar Servidor GATT activo (al igual que un Galaxy Fit 3 / Smartwatch)
+        try {
+            if (gattServer == null && bluetoothManager != null) {
+                gattServer = bluetoothManager.openGattServer(context, object : BluetoothGattServerCallback() {})
+                val sosGattService = BluetoothGattService(
+                    SOS_SERVICE_UUID.uuid,
+                    BluetoothGattService.SERVICE_TYPE_PRIMARY
+                )
+                gattServer?.addService(sosGattService)
+                Log.d(TAG, "Servidor GATT de socorro iniciado como periférico activo estilo Smartwatch/GalaxyFit3.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error al abrir Servidor GATT periférico", e)
+        }
+
+        // 2. Asignar nombre visible del dispositivo
+        try {
+            adapter.name = "SOS_VICTIMA"
+        } catch (e: Exception) {}
+
         advertiser = adapter.bluetoothLeAdvertiser
         if (advertiser == null) {
-            onStatusChanged(false, "El chip Bluetooth de este teléfono no permite emitir señales BLE (BluetoothLeAdvertiser es null).")
+            onStatusChanged(false, "No se pudo obtener el transmisor BluetoothLeAdvertiser.")
             return
         }
 
-        // Configuración de emisión en MÁXIMA FRECUENCIA Y POTENCIA (LOW_LATENCY)
+        // Configuración de emisión en MÁXIMA FRECUENCIA Y POTENCIA DE RADIO (LOW_LATENCY)
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .setConnectable(true) // Habilita conectividad para compatibilidad con todos los procesadores
+            .setConnectable(true) // Periférico conectable estilo Galaxy Fit 3
             .setTimeout(0)
             .build()
 
         // Capturar la última ubicación GPS conocida en el instante del SOS
         val gpsCoords = locationHelper.getLastKnownLocation()
-        // Acortar ID si es muy largo para no exceder 31 bytes
         val shortId = if (victimId.length > 10) victimId.take(10) else victimId
         val fullDataString = "$shortId|$gpsCoords"
         val payload = fullDataString.toByteArray(Charsets.UTF_8)
 
         val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(false)
-            .setIncludeTxPowerLevel(false)
+            .setIncludeDeviceName(true) // Transmitir nombre del teléfono al igual que el Galaxy Fit 3
+            .setIncludeTxPowerLevel(true)
             .addServiceUuid(SOS_SERVICE_UUID)
             .addServiceData(SOS_SERVICE_UUID, payload)
             .build()
@@ -107,7 +129,7 @@ class BleAdvertiser(private val context: Context) {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
                 super.onStartSuccess(settingsInEffect)
                 isAdvertising = true
-                Log.d(TAG, "Beacon SOS iniciado exitosamente en el chip Bluetooth con ID y GPS: $fullDataString")
+                Log.d(TAG, "Beacon SOS activo estilo Smartwatch con ID y GPS: $fullDataString")
                 onStatusChanged(true, null)
             }
 
@@ -115,14 +137,14 @@ class BleAdvertiser(private val context: Context) {
                 super.onStartFailure(errorCode)
                 isAdvertising = false
                 val errorMsg = when (errorCode) {
-                    AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "Datos demasiado grandes para el paquete BLE"
-                    AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Demasiados anunciantes activos en el chip"
+                    AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "Datos demasiado grandes"
+                    AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Demasiados anunciantes activos"
                     AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "El anuncio ya está activo"
                     AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "Error interno del chip Bluetooth"
-                    AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Característica no soportada por el hardware del teléfono"
+                    AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Característica no soportada por el hardware"
                     else -> "Error de anuncio desconocido: $errorCode"
                 }
-                Log.e(TAG, "Fallo al iniciar beacon SOS: $errorMsg (Código $errorCode)")
+                Log.e(TAG, "Fallo al iniciar beacon SOS: $errorMsg")
                 onStatusChanged(false, errorMsg)
             }
         }
@@ -149,6 +171,10 @@ class BleAdvertiser(private val context: Context) {
                 Log.e(TAG, "Error al detener publicidad BLE", e)
             }
         }
+        try {
+            gattServer?.close()
+            gattServer = null
+        } catch (e: Exception) {}
         advertiseCallback = null
         isAdvertising = false
     }
