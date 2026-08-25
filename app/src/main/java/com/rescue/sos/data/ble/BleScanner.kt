@@ -55,7 +55,7 @@ class BleScanner(private val context: Context) {
         )
 
         val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY) // Escaneo rápido para localización precisa
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
         stopScan()
@@ -66,16 +66,25 @@ class BleScanner(private val context: Context) {
                 val record = result.scanRecord ?: return
                 val serviceData = record.getServiceData(BleAdvertiser.SOS_SERVICE_UUID)
 
-                val victimId = if (serviceData != null && serviceData.isNotEmpty()) {
-                    String(serviceData, Charsets.UTF_8)
-                } else {
-                    result.device.address ?: "VICTIMA_DESCONOCIDA"
+                var victimId = result.device.address ?: "VICTIMA_DESCONOCIDA"
+                var locationCoords = "SIN_GPS"
+
+                if (serviceData != null && serviceData.isNotEmpty()) {
+                    val fullPayload = String(serviceData, Charsets.UTF_8)
+                    if (fullPayload.contains("|")) {
+                        val parts = fullPayload.split("|")
+                        victimId = parts.getOrNull(0) ?: victimId
+                        locationCoords = parts.getOrNull(1) ?: "SIN_GPS"
+                    } else {
+                        victimId = fullPayload
+                    }
                 }
 
                 val signal = VictimSignal(
                     victimId = victimId,
                     rssi = result.rssi,
-                    timestamp = System.currentTimeMillis()
+                    timestamp = System.currentTimeMillis(),
+                    locationCoordinates = locationCoords
                 )
 
                 victimMap[victimId] = signal

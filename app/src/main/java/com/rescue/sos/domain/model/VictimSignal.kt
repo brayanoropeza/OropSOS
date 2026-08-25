@@ -4,6 +4,7 @@ data class VictimSignal(
     val victimId: String,
     val rssi: Int,
     val timestamp: Long,
+    val locationCoordinates: String = "SIN_GPS",
     val distanceCategory: DistanceCategory = getDistanceCategory(rssi)
 )
 

@@ -1,11 +1,14 @@
 package com.rescue.sos.presentation.rescuer
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CellTower
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -56,12 +59,12 @@ fun RescuerScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "MODO RESCATISTA (ESCANER BLE)",
+                        text = "MODO RESCATISTA (ESCANER BLE + GPS)",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = "Escanea señales de socorro emitidas por teléfonos de víctimas bajo escombros.",
+                        text = "Detecta señales SOS cercanas y muestra la última posición GPS transmitida por la víctima.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -133,7 +136,7 @@ fun RescuerScreen(
             )
             if (isScanning) {
                 Text(
-                    text = "Busqueda Activa...",
+                    text = "Búsqueda Activa...",
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
                 )
@@ -171,6 +174,7 @@ fun RescuerScreen(
 
 @Composable
 fun VictimSignalCard(victim: VictimSignal) {
+    val context = LocalContext.current
     val (statusColor, categoryText) = when (victim.distanceCategory) {
         DistanceCategory.VERY_CLOSE -> Color(0xFFD32F2F) to "¡MUY CERCA (1 - 3m)!"
         DistanceCategory.CLOSE -> Color(0xFFF57C00) to "CERCA (3 - 10m)"
@@ -181,51 +185,91 @@ fun VictimSignalCard(victim: VictimSignal) {
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Indicador de Proximidad
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .background(statusColor, shape = MaterialTheme.shapes.small)
-            )
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .background(statusColor, shape = MaterialTheme.shapes.small)
+                )
 
-            Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = victim.victimId,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-                Text(
-                    text = categoryText,
-                    color = statusColor,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = victim.distanceCategory.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = victim.victimId,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Text(
+                        text = categoryText,
+                        color = statusColor,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "${victim.rssi} dBm",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        color = statusColor
+                    )
+                    Text(
+                        text = "Intensidad",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
 
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "${victim.rssi} dBm",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 18.sp,
-                    color = statusColor
-                )
-                Text(
-                    text = "Intensidad",
-                    style = MaterialTheme.typography.labelSmall
-                )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Coordenadas GPS del momento del SOS
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.extraSmall)
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "GPS",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "GPS: ${victim.locationCoordinates}",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                if (victim.locationCoordinates != "SIN_GPS" && victim.locationCoordinates.contains(",")) {
+                    TextButton(
+                        onClick = {
+                            try {
+                                val geoUri = Uri.parse("geo:${victim.locationCoordinates}?q=${victim.locationCoordinates}(Victima_SOS)")
+                                val mapIntent = Intent(Intent.ACTION_VIEW, geoUri).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(mapIntent)
+                            } catch (e: Exception) {
+                                // Ignorar si no hay app de mapas
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    ) {
+                        Text("VER MAPA", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

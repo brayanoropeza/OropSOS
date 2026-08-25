@@ -10,12 +10,14 @@ import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
+import com.rescue.sos.data.location.LocationHelper
 
 class BleAdvertiser(private val context: Context) {
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? get() = bluetoothManager?.adapter
     private var advertiser: BluetoothLeAdvertiser? = null
+    private val locationHelper = LocationHelper(context)
 
     private var advertiseCallback: AdvertiseCallback? = null
     var isAdvertising = false
@@ -40,7 +42,7 @@ class BleAdvertiser(private val context: Context) {
         return if (!adapter.isEnabled) {
             try {
                 Log.d(TAG, "Bluetooth apagado. Activando Bluetooth automáticamente por emergencia...")
-                adapter.enable() // Enciende el Bluetooth automáticamente en caso de socorro/emergencia
+                adapter.enable()
                 true
             } catch (e: Exception) {
                 Log.e(TAG, "Error al encender Bluetooth automáticamente", e)
@@ -63,10 +65,8 @@ class BleAdvertiser(private val context: Context) {
             return
         }
 
-        // Si el Bluetooth está apagado, la app lo enciende automáticamente por emergencia
         if (!adapter.isEnabled) {
             enableBluetoothIfDisabled()
-            // Breve retardo para permitir que la radio de Bluetooth encienda
             Thread.sleep(1000)
         }
 
@@ -88,7 +88,11 @@ class BleAdvertiser(private val context: Context) {
             .setTimeout(0)
             .build()
 
-        val payload = victimId.toByteArray(Charsets.UTF_8)
+        // Capturar la última ubicación GPS conocida en el instante del SOS
+        val gpsCoords = locationHelper.getLastKnownLocation()
+        val fullDataString = "$victimId|$gpsCoords"
+        val payload = fullDataString.toByteArray(Charsets.UTF_8)
+
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false)
@@ -102,7 +106,7 @@ class BleAdvertiser(private val context: Context) {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
                 super.onStartSuccess(settingsInEffect)
                 isAdvertising = true
-                Log.d(TAG, "Beacon SOS iniciado exitosamente con ID: $victimId")
+                Log.d(TAG, "Beacon SOS iniciado exitosamente con ID y GPS: $fullDataString")
                 onStatusChanged(true, null)
             }
 
