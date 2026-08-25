@@ -5,12 +5,12 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Fondo Oscuro de Alta Resistencia con Gradiente y Bordes Suaves -->
+    <!-- Fondo Oscuro Circular perfecto para iconos redondos -->
     <path
         android:fillColor="#0D1117"
-        android:pathData="M54,4 C26.38,4 4,26.38 4,54 C4,81.62 26.38,104 54,104 C81.62,104 104,81.62 104,54 C104,26.38 81.62,4 54,4 Z" />
+        android:pathData="M54,2 C25.28,2 2,25.28 2,54 C2,82.72 25.28,106 54,106 C82.72,106 106,82.72 106,54 C106,25.28 82.72,2 54,2 Z" />
 
-    <!-- Olas de Radar Sísmico Verde Neón de Fondo (Efecto 3D Depth) -->
+    <!-- Olas de Radar Sísmico Verde Neón de Fondo -->
     <path
         android:strokeColor="#00E676"
         android:strokeWidth="1.2"

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CompassCalibration
-import androidx.compose.material.icons.filled.Exploration
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Satellite
@@ -217,7 +216,7 @@ fun Radar3DVisualizer(
                 // Indicador de Brújula Magnética
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Exploration,
+                        imageVector = Icons.Default.CompassCalibration,
                         contentDescription = "Brújula",
                         tint = Color(0xFF81D4FA),
                         modifier = Modifier.size(14.dp)
