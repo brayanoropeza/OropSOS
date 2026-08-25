@@ -1,5 +1,7 @@
 package com.rescue.sos.presentation.victim
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -15,12 +17,14 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.ContactPhone
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,6 +48,7 @@ import com.rescue.sos.data.contacts.EmergencyContact
 import com.rescue.sos.data.contacts.EmergencyContactsManager
 import com.rescue.sos.data.location.LocationHelper
 import com.rescue.sos.data.network.SasmexAlertClient
+import com.rescue.sos.presentation.components.BannerAdView
 import com.rescue.sos.service.SosForegroundService
 import kotlinx.coroutines.delay
 
@@ -64,6 +69,10 @@ fun VictimScreen(
     var isBluetoothEnabled by remember { mutableStateOf(advertiser.isBluetoothEnabled()) }
     var isLocationEnabled by remember { mutableStateOf(locationHelper.isLocationEnabled()) }
     var isBatteryExempt by remember { mutableStateOf(batteryHelper.isIgnoringBatteryOptimizations()) }
+
+    // Modo PRO / Donador para desarrollador y pruebas (Remueve anuncios si está activo)
+    var isProUser by remember { mutableStateOf(false) }
+    var showDonateDialog by remember { mutableStateOf(false) }
 
     // Lista de Contactos de Emergencia
     var savedContacts by remember { mutableStateOf(contactsManager.getContacts()) }
@@ -174,18 +183,33 @@ fun VictimScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "MODO VÍCTIMA (EMISOR SOS + GPS)",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "MODO VÍCTIMA (EMISOR SOS + GPS)",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    // Botón para Donar / Modo Pro Desarrollador
+                    IconButton(onClick = { showDonateDialog = true }) {
+                        Icon(
+                            imageVector = if (isProUser) Icons.Default.Star else Icons.Default.Coffee,
+                            contentDescription = "Donar",
+                            tint = if (isProUser) Color(0xFFFFD54F) else Color(0xFFFFB74D)
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -458,6 +482,14 @@ fun VictimScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
+            // Banner de Publicidad Google AdMob (Se oculta si es PRO o durante emergencia)
+            BannerAdView(
+                isProUser = isProUser,
+                isEmergencyActive = isSosActive || activeSasmexAlert != null || show40sConfirmationDialog
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             // Créditos de Desarrollador
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -491,6 +523,70 @@ fun VictimScreen(
                 }
             }
         }
+    }
+
+    // Modal para Apoyar Proyecto / Donar / Remover Anuncios
+    if (showDonateDialog) {
+        AlertDialog(
+            onDismissRequest = { showDonateDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.Coffee, contentDescription = null, tint = Color(0xFFFFB74D))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("☕ Apoyar a OropSOS", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "OropSOS es un proyecto de socorro y protección civil sísmica. Apoya el desarrollo donando para un café o activa el Modo PRO para remover anuncios.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isProUser) "Estado: ⭐️ MODO PRO ACTIVO (SIN ANUNCIOS)" else "Estado: Versión Estándar (Con Banners)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = if (isProUser) Color(0xFFFFD54F) else Color.Gray
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isProUser = !isProUser
+                        showDonateDialog = false
+                        onStatusMessage(if (isProUser) "⭐️ MODO PRO ACTIVADO: Anuncios removidos." else "Modo estándar activado.")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isProUser) Color.DarkGray else Color(0xFF2E7D32))
+                ) {
+                    Text(if (isProUser) "DESACTIVAR MODO PRO" else "ACTIVAR MODO PRO (REMOVER ANUNCIOS)")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        try {
+                            // Abrir enlace de donación directo o BuyMeACoffee
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/oropsos")).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            // Ignorar si no hay navegador
+                        }
+                    }
+                ) {
+                    Text("☕ DONAR PARA UN CAFÉ")
+                }
+            }
+        )
     }
 
     // Modal para Agregar Contacto de Emergencia

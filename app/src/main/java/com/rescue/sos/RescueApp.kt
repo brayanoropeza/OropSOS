@@ -5,12 +5,20 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import com.google.android.gms.ads.MobileAds
 
 class RescueApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+
+        // Inicializar SDK de Google Mobile Ads / AdMob en hilo secundario
+        try {
+            MobileAds.initialize(this) {}
+        } catch (e: Exception) {
+            // Manejo seguro en entornos de prueba
+        }
     }
 
     private fun createNotificationChannel() {
