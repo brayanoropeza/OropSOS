@@ -5,7 +5,6 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
@@ -48,14 +47,10 @@ class BleScanner(private val context: Context) {
             return
         }
 
-        val filters = listOf(
-            ScanFilter.Builder()
-                .setServiceUuid(BleAdvertiser.SOS_SERVICE_UUID)
-                .build()
-        )
-
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
             .build()
 
         stopScan()
@@ -65,8 +60,15 @@ class BleScanner(private val context: Context) {
                 super.onScanResult(callbackType, result)
                 val record = result.scanRecord ?: return
                 val serviceData = record.getServiceData(BleAdvertiser.SOS_SERVICE_UUID)
+                val hasSosUuid = record.serviceUuids?.contains(BleAdvertiser.SOS_SERVICE_UUID) == true || serviceData != null
+                val devName = record.deviceName
 
-                var victimId = result.device.address ?: "VICTIMA_DESCONOCIDA"
+                // Filtrar por software si no contiene la firma SOS
+                if (!hasSosUuid && devName?.contains("VICTIMA") != true) {
+                    return
+                }
+
+                var victimId = devName ?: result.device.address ?: "VICTIMA_SOS"
                 var locationCoords = "SIN_GPS"
 
                 if (serviceData != null && serviceData.isNotEmpty()) {
@@ -100,7 +102,8 @@ class BleScanner(private val context: Context) {
         }
 
         try {
-            scanner?.startScan(filters, settings, scanCallback)
+            // Escaneo por software (sin filtro de hardware rígido) para evitar omisiones por firmware de antenas
+            scanner?.startScan(null, settings, scanCallback)
             isScanning = true
             onStatusChanged(true, null)
         } catch (e: SecurityException) {

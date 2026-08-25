@@ -67,30 +67,31 @@ class BleAdvertiser(private val context: Context) {
 
         if (!adapter.isEnabled) {
             enableBluetoothIfDisabled()
-            Thread.sleep(1000)
+            try {
+                Thread.sleep(800)
+            } catch (e: Exception) {}
         }
 
-        if (!adapter.isMultipleAdvertisementSupported) {
-            onStatusChanged(false, "Este dispositivo no soporta BLE Multiple Advertisement.")
-            return
-        }
-
+        // Obtener el transmisor BLE directamente del adaptador (sin bloqueo por isMultipleAdvertisementSupported)
         advertiser = adapter.bluetoothLeAdvertiser
         if (advertiser == null) {
-            onStatusChanged(false, "No se pudo obtener el BluetoothLeAdvertiser.")
+            onStatusChanged(false, "El chip Bluetooth de este teléfono no permite emitir señales BLE (BluetoothLeAdvertiser es null).")
             return
         }
 
+        // Configuración de emisión en MÁXIMA FRECUENCIA Y POTENCIA (LOW_LATENCY)
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .setConnectable(false)
+            .setConnectable(true) // Habilita conectividad para compatibilidad con todos los procesadores
             .setTimeout(0)
             .build()
 
         // Capturar la última ubicación GPS conocida en el instante del SOS
         val gpsCoords = locationHelper.getLastKnownLocation()
-        val fullDataString = "$victimId|$gpsCoords"
+        // Acortar ID si es muy largo para no exceder 31 bytes
+        val shortId = if (victimId.length > 10) victimId.take(10) else victimId
+        val fullDataString = "$shortId|$gpsCoords"
         val payload = fullDataString.toByteArray(Charsets.UTF_8)
 
         val data = AdvertiseData.Builder()
@@ -106,7 +107,7 @@ class BleAdvertiser(private val context: Context) {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
                 super.onStartSuccess(settingsInEffect)
                 isAdvertising = true
-                Log.d(TAG, "Beacon SOS iniciado exitosamente con ID y GPS: $fullDataString")
+                Log.d(TAG, "Beacon SOS iniciado exitosamente en el chip Bluetooth con ID y GPS: $fullDataString")
                 onStatusChanged(true, null)
             }
 
@@ -114,14 +115,14 @@ class BleAdvertiser(private val context: Context) {
                 super.onStartFailure(errorCode)
                 isAdvertising = false
                 val errorMsg = when (errorCode) {
-                    AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "Datos demasiado grandes"
-                    AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Demasiados anunciantes activos"
-                    AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "El anuncio ya está corriendo"
+                    AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "Datos demasiado grandes para el paquete BLE"
+                    AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Demasiados anunciantes activos en el chip"
+                    AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "El anuncio ya está activo"
                     AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "Error interno del chip Bluetooth"
-                    AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Característica no soportada"
+                    AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Característica no soportada por el hardware del teléfono"
                     else -> "Error de anuncio desconocido: $errorCode"
                 }
-                Log.e(TAG, "Fallo al iniciar beacon SOS: $errorMsg")
+                Log.e(TAG, "Fallo al iniciar beacon SOS: $errorMsg (Código $errorCode)")
                 onStatusChanged(false, errorMsg)
             }
         }
@@ -135,7 +136,7 @@ class BleAdvertiser(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Excepción al iniciar BLE Advertising", e)
             isAdvertising = false
-            onStatusChanged(false, e.localizedMessage ?: "Error desconocido")
+            onStatusChanged(false, e.localizedMessage ?: "Error desconocido al transmitir SOS")
         }
     }
 
