@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VolumeUp
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.rescue.sos.data.audio.BuildingMaterial
 import com.rescue.sos.data.audio.MetalDetectorAudioTracker
 import com.rescue.sos.data.ble.BleScanner
+import com.rescue.sos.data.sensor.CompassHelper
 import com.rescue.sos.domain.model.DistanceCategory
 import com.rescue.sos.domain.model.VictimSignal
 
@@ -36,36 +38,34 @@ fun RescuerScreen(
     val context = LocalContext.current
     val scanner = remember { BleScanner(context) }
     val audioTracker = remember { MetalDetectorAudioTracker() }
+    val compassHelper = remember { CompassHelper(context) }
+    val compassAzimuth by compassHelper.azimuth.collectAsState()
     val detectedVictims by scanner.detectedVictims.collectAsState()
 
     var isScanning by remember { mutableStateOf(false) }
-    var isAudioDetectorActive by remember { mutableStateOf(false) }
     var selectedMaterial by remember { mutableStateOf(BuildingMaterial.CONCRETE) }
     var selectedVictimFor3d by remember { mutableStateOf<VictimSignal?>(null) }
 
-    // Actualizar víctima seleccionada automáticamente al detectar señales
+    // Iniciar escucha de brújula y rastreador sonoro continuo
+    DisposableEffect(Unit) {
+        audioTracker.startTracking()
+        compassHelper.startListening()
+        onDispose {
+            audioTracker.stopTracking()
+            compassHelper.stopListening()
+            scanner.stopScan()
+        }
+    }
+
+    // Actualizar víctima seleccionada y tono de audio automáticamente al detectar señales
     LaunchedEffect(detectedVictims) {
         if (detectedVictims.isNotEmpty()) {
             val closest = detectedVictims.first()
             selectedVictimFor3d = closest
-            if (isAudioDetectorActive) {
-                audioTracker.updateRssiAndMaterial(closest.rssi, selectedMaterial)
-            }
+            audioTracker.updateRssiAndMaterial(closest.rssi, selectedMaterial)
         } else {
             selectedVictimFor3d = null
-        }
-    }
-
-    DisposableEffect(isAudioDetectorActive) {
-        if (isAudioDetectorActive) {
-            audioTracker.startTracking()
-        } else {
-            audioTracker.stopTracking()
-        }
-
-        onDispose {
-            audioTracker.stopTracking()
-            scanner.stopScan()
+            audioTracker.updateRssiAndMaterial(-95, selectedMaterial)
         }
     }
 
@@ -88,12 +88,12 @@ fun RescuerScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "MODO RESCATISTA (RADAR 3D + DETECTOR SONORO)",
+                        text = "MODO RESCATISTA (RADAR 3D + BRÚJULA)",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = "Visualización 3D de escombros y rastreo por sonido estilo detector de metales.",
+                        text = "Orientación por brújula magnética, audio continuo y visor Maps 3D.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -112,57 +112,46 @@ fun RescuerScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Visualizador Radar 3D
+        // Visualizador Radar 3D con orientación por brújula
         Radar3DVisualizer(
             victimSignal = selectedVictimFor3d ?: detectedVictims.firstOrNull(),
-            selectedMaterial = selectedMaterial
+            selectedMaterial = selectedMaterial,
+            compassAzimuth = compassAzimuth
         )
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Selector de Material de Escombros + Audio Detector Toggle
+        // Selector de Material de Escombros
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.VolumeUp,
-                            contentDescription = null,
-                            tint = if (isAudioDetectorActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Audio Detector de Metales (Beeps)",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    Switch(
-                        checked = isAudioDetectorActive,
-                        onCheckedChange = { active ->
-                            isAudioDetectorActive = active
-                            if (active) {
-                                onStatusMessage("Rastreador de sonido activo...")
-                            }
-                        }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.VolumeUp,
+                        contentDescription = null,
+                        tint = Color(0xFF00E676),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Audio Detector de Metales: ACTIVADO",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF00E676)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Selector de Materiales
                 Text(
-                    text = "Material del Edificio / Escombros:",
+                    text = "Atenuación por Material de Escombros:",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -248,9 +237,7 @@ fun RescuerScreen(
                         isSelected = selectedVictimFor3d?.victimId == victim.victimId,
                         onSelect = {
                             selectedVictimFor3d = victim
-                            if (isAudioDetectorActive) {
-                                audioTracker.updateRssiAndMaterial(victim.rssi, selectedMaterial)
-                            }
+                            audioTracker.updateRssiAndMaterial(victim.rssi, selectedMaterial)
                         }
                     )
                 }
@@ -352,18 +339,29 @@ fun VictimSignalCard3D(
                     TextButton(
                         onClick = {
                             try {
-                                val geoUri = Uri.parse("geo:${victim.locationCoordinates}?q=${victim.locationCoordinates}(Victima_SOS)")
-                                val mapIntent = Intent(Intent.ACTION_VIEW, geoUri).apply {
+                                val parts = victim.locationCoordinates.split(",")
+                                val lat = parts[0].trim()
+                                val lng = parts[1].trim()
+                                val gmapsUri = Uri.parse("geo:$lat,$lng?z=20&t=k&q=$lat,$lng(Victima_SOS)")
+                                val mapIntent = Intent(Intent.ACTION_VIEW, gmapsUri).apply {
+                                    setPackage("com.google.android.apps.maps")
                                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                 }
-                                context.startActivity(mapIntent)
+                                try {
+                                    context.startActivity(mapIntent)
+                                } catch (e: Exception) {
+                                    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/@$lat,$lng,100m/data=!3m1!1e3")).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(webIntent)
+                                }
                             } catch (e: Exception) {
                                 // Ignorar si no hay app de mapas
                             }
                         },
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                     ) {
-                        Text("VER MAPA", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("VER MAPA 3D", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

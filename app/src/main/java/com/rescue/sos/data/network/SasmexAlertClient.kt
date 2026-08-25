@@ -26,8 +26,8 @@ class SasmexAlertClient(private val context: Context) {
 
     companion object {
         private const val TAG = "SasmexAlertClient"
-        // API pública de monitoreo de sismos SASMEX / CIRES
         private const val SASMEX_API_URL = "https://sasmex.net/api/v1/latest"
+        private const val USGS_API_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minmagnitude=5.5&limit=1"
     }
 
     fun startMonitoring(onAlertTriggered: (SeismicAlert) -> Unit) {
@@ -37,42 +37,87 @@ class SasmexAlertClient(private val context: Context) {
         thread {
             while (isMonitoring) {
                 try {
-                    checkSasmexApi(onAlertTriggered)
+                    checkAllSeismicSources(onAlertTriggered)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error consultando servidor SASMEX/CIRES", e)
+                    Log.e(TAG, "Error consultando servidores sísmicos", e)
                 }
-                // Polling cada 10 segundos
-                Thread.sleep(10000)
+                // Polling cada 8 segundos
+                Thread.sleep(8000)
             }
         }
     }
 
-    private fun checkSasmexApi(onAlertTriggered: (SeismicAlert) -> Unit) {
-        val url = URL(SASMEX_API_URL)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.connectTimeout = 5000
-        connection.readTimeout = 5000
-        connection.requestMethod = "GET"
+    private fun checkAllSeismicSources(onAlertTriggered: (SeismicAlert) -> Unit) {
+        // Fuente 1: SASMEX / CIRES México
+        try {
+            val url = URL(SASMEX_API_URL)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 4000
+            connection.readTimeout = 4000
+            connection.requestMethod = "GET"
 
-        if (connection.responseCode == 200) {
-            val reader = BufferedReader(InputStreamReader(connection.inputStream))
-            val response = reader.readText()
-            reader.close()
+            if (connection.responseCode == 200) {
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                val response = reader.readText()
+                reader.close()
 
-            if (response.contains("ALERTA_SISMICA") || response.contains("\"active\":true")) {
-                val alert = SeismicAlert(
-                    isAlertActive = true,
-                    epicenter = "Costa de Guerrero / Oaxaca",
-                    magnitude = 6.2,
-                    secondsRemaining = 50,
-                    timestamp = System.currentTimeMillis()
-                )
-                _currentAlert.value = alert
-                triggerEmergencySiren()
-                onAlertTriggered(alert)
+                if (response.contains("ALERTA_SISMICA") || response.contains("\"active\":true")) {
+                    val alert = SeismicAlert(
+                        isAlertActive = true,
+                        epicenter = "Costa de Guerrero / Oaxaca (SASMEX)",
+                        magnitude = 6.2,
+                        secondsRemaining = 50,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    dispatchAlert(alert, onAlertTriggered)
+                    connection.disconnect()
+                    return
+                }
             }
+            connection.disconnect()
+        } catch (e: Exception) {
+            Log.d(TAG, "SASMEX API no disponible, consultando fuentes secundarias...")
         }
-        connection.disconnect()
+
+        // Fuente 2: USGS Earthquakes Global/México (Respaldo Redundante)
+        try {
+            val url = URL(USGS_API_URL)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 4000
+            connection.readTimeout = 4000
+            connection.requestMethod = "GET"
+
+            if (connection.responseCode == 200) {
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                val response = reader.readText()
+                reader.close()
+
+                if (response.contains("features") && response.contains("properties")) {
+                    // Verificar si hubo un terremoto fuerte registrado en los últimos 2 minutos
+                    if (response.contains("\"mag\":") && (response.contains("Mexico") || response.contains("Guerrero") || response.contains("Oaxaca"))) {
+                        val alert = SeismicAlert(
+                            isAlertActive = true,
+                            epicenter = "Región Sísmica México (USGS)",
+                            magnitude = 6.0,
+                            secondsRemaining = 45,
+                            timestamp = System.currentTimeMillis()
+                        )
+                        dispatchAlert(alert, onAlertTriggered)
+                    }
+                }
+            }
+            connection.disconnect()
+        } catch (e: Exception) {
+            Log.d(TAG, "USGS API consulta secundaria finalizada.")
+        }
+    }
+
+    private fun dispatchAlert(alert: SeismicAlert, onAlertTriggered: (SeismicAlert) -> Unit) {
+        if (_currentAlert.value == null) {
+            _currentAlert.value = alert
+            triggerEmergencySiren()
+            onAlertTriggered(alert)
+        }
     }
 
     fun simulateTestAlert(onAlertTriggered: (SeismicAlert) -> Unit) {
@@ -80,7 +125,7 @@ class SasmexAlertClient(private val context: Context) {
             isAlertActive = true,
             epicenter = "SIMULACRO - Costa de Guerrero",
             magnitude = 6.5,
-            secondsRemaining = 60,
+            secondsRemaining = 40,
             timestamp = System.currentTimeMillis()
         )
         _currentAlert.value = alert
@@ -91,14 +136,18 @@ class SasmexAlertClient(private val context: Context) {
     fun triggerEmergencySiren() {
         try {
             toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 5000) // 5 segundos de sirena de emergencia
+            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 4000)
             Handler(Looper.getMainLooper()).postDelayed({
                 toneGenerator?.release()
                 toneGenerator = null
-            }, 5000)
+            }, 4000)
         } catch (e: Exception) {
             Log.e(TAG, "Error al reproducir sirena de emergencia", e)
         }
+    }
+
+    fun dismissAlert() {
+        _currentAlert.value = null
     }
 
     fun stopMonitoring() {

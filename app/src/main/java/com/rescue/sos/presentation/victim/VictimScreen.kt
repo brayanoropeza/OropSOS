@@ -10,9 +10,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,15 +23,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.rescue.sos.data.battery.BatteryOptimizationHelper
 import com.rescue.sos.data.ble.BleAdvertiser
 import com.rescue.sos.data.location.LocationHelper
 import com.rescue.sos.data.network.SasmexAlertClient
 import com.rescue.sos.service.SosForegroundService
+import kotlinx.coroutines.delay
 
 @Composable
 fun VictimScreen(
@@ -37,6 +45,7 @@ fun VictimScreen(
     onStatusMessage: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val advertiser = remember { BleAdvertiser(context) }
     val sasmexClient = remember { SasmexAlertClient(context) }
     val batteryHelper = remember { BatteryOptimizationHelper(context) }
@@ -47,26 +56,62 @@ fun VictimScreen(
     var isLocationEnabled by remember { mutableStateOf(locationHelper.isLocationEnabled()) }
     var isBatteryExempt by remember { mutableStateOf(batteryHelper.isIgnoringBatteryOptimizations()) }
 
+    // Estado del Conteo Regresivo de 40 Segundos ("Estoy Bien")
+    var show40sConfirmationDialog by remember { mutableStateOf(false) }
+    var countdownSeconds by remember { mutableIntStateOf(40) }
+
     val activeSasmexAlert by sasmexClient.currentAlert.collectAsState()
 
+    // Escuchar el ciclo de vida (ON_RESUME) para refrescar estados al volver de Ajustes de Android 15+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isBluetoothEnabled = advertiser.isBluetoothEnabled()
+                isLocationEnabled = locationHelper.isLocationEnabled()
+                isBatteryExempt = batteryHelper.isIgnoringBatteryOptimizations()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     val buttonColor by animateColorAsState(
-        targetValue = if (isSosActive) Color(0xFFD32F2F) else Color(0xFF388E3C),
+        targetValue = if (isSosActive) Color(0xFFD32F2F) else Color(0xFF2E7D32),
         label = "SosButtonColor"
     )
 
-    // Monitoreo de Alerta Sísmica de México SASMEX / CIRES
+    // Monitoreo de Alerta Sísmica con ventana de 40s de confirmación
     DisposableEffect(Unit) {
         sasmexClient.startMonitoring { alert ->
-            onStatusMessage("¡ALERTA SÍSMICA CIRES DETECTADA! ACTIVANDO BLUETOOTH, GPS Y SOS")
-            advertiser.enableBluetoothIfDisabled()
-            isBluetoothEnabled = true
-            isLocationEnabled = locationHelper.isLocationEnabled()
-            SosForegroundService.startService(context, victimId)
-            isSosActive = true
+            onStatusMessage("¡ALERTA SÍSMICA DETECTADA! INICIANDO CONTEO DE 40s DE SEGURIDAD...")
+            countdownSeconds = 40
+            show40sConfirmationDialog = true
         }
 
         onDispose {
             sasmexClient.stopMonitoring()
+        }
+    }
+
+    // Efecto de temporizador de 40 segundos para confirmar estado de salud
+    LaunchedEffect(show40sConfirmationDialog) {
+        if (show40sConfirmationDialog) {
+            while (countdownSeconds > 0 && show40sConfirmationDialog) {
+                delay(1000L)
+                countdownSeconds -= 1
+            }
+            if (show40sConfirmationDialog && countdownSeconds == 0) {
+                // Se agotó el tiempo: Activar transmisión de emergencia automática
+                show40sConfirmationDialog = false
+                advertiser.enableBluetoothIfDisabled()
+                isBluetoothEnabled = true
+                isLocationEnabled = locationHelper.isLocationEnabled()
+                SosForegroundService.startService(context, victimId)
+                isSosActive = true
+                onStatusMessage("¡TIEMPO AGOTADO SIN RESPUESTA! SOS BLE + GPS ACTIVADO AUTOMÁTICAMENTE")
+            }
         }
     }
 
@@ -85,13 +130,13 @@ fun VictimScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "🚨 ALERTA SÍSMICA MÉXICO (CIRES) 🚨",
+                        text = "🚨 ALERTA SÍSMICA DETECTADA (SASMEX / CIRES) 🚨",
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = "Epicentro: ${alert.epicenter}\nTiempo estimado de llegada: ~${alert.secondsRemaining}s.\nBluetooth + GPS Transmitiendo Posición.",
+                        text = "Origen: ${alert.epicenter}\nRevisión automática de seguridad activa.",
                         color = Color.White,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -180,19 +225,25 @@ fun VictimScreen(
                 Card(
                     modifier = Modifier.weight(1f),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isBluetoothEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                        containerColor = if (isBluetoothEnabled) Color(0xFF1B5E20) else MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
                     Row(
                         modifier = Modifier.padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(
+                            imageVector = if (isBluetoothEnabled) Icons.Default.CheckCircle else Icons.Default.Bluetooth,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isBluetoothEnabled) "Bluetooth ON" else "Bluetooth OFF",
+                            text = if (isBluetoothEnabled) "Bluetooth Activo" else "Bluetooth OFF",
                             style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
                 }
@@ -201,19 +252,25 @@ fun VictimScreen(
                 Card(
                     modifier = Modifier.weight(1f),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isLocationEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                        containerColor = if (isLocationEnabled) Color(0xFF1B5E20) else MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
                     Row(
                         modifier = Modifier.padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(
+                            imageVector = if (isLocationEnabled) Icons.Default.CheckCircle else Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = if (isLocationEnabled) "GPS Listo" else "GPS Apagado",
                             style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
                 }
@@ -221,54 +278,53 @@ fun VictimScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Exención de Optimización de Batería (Ejecución sin límites)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isBatteryExempt) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            // Exención de Optimización de Batería (SE MUESTRA ÚNICAMENTE SI NO SE HA CONCEDIDO)
+            if (!isBatteryExempt) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
                     Row(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.BatterySaver, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = if (isBatteryExempt) "Segundo Plano Sin Restricciones" else "Optimización de Batería Activa",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = if (isBatteryExempt) "Android no cerrará el SOS al apagar la pantalla" else "Android podría cerrar la app. Otorga el permiso.",
-                                style = MaterialTheme.typography.labelSmall
-                            )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(imageVector = Icons.Default.BatterySaver, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Restricción de Batería Detectada",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "Otorga el permiso para que el SOS no se apague en segundo plano.",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
                         }
-                    }
 
-                    if (!isBatteryExempt) {
                         Button(
                             onClick = {
                                 batteryHelper.requestIgnoreBatteryOptimizations()
-                                isBatteryExempt = batteryHelper.isIgnoringBatteryOptimizations()
                             },
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Text("EXIMIR", fontSize = 11.sp)
+                            Text("ACTIVAR", fontSize = 11.sp)
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(6.dp))
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
 
             // Card de SASMEX CIRES Alerta Sísmica México
             Card(
@@ -284,24 +340,21 @@ fun VictimScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "🇲🇽 Red Alerta Sísmica CIRES / SASMEX",
+                            text = "🇲🇽 Red Alerta Sísmica CIRES / SASMEX / USGS",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.bodySmall
                         )
                         Text(
-                            text = "Auto-activa Bluetooth + GPS + SOS al temblar",
+                            text = "Temporizador 40s + Auto-SOS + GPS al temblar",
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
                     Button(
                         onClick = {
-                            sasmexClient.simulateTestAlert { alert ->
-                                onStatusMessage("¡SIMULACRO ALERTA SÍSMICA ACTIVADO!")
-                                advertiser.enableBluetoothIfDisabled()
-                                isBluetoothEnabled = true
-                                isLocationEnabled = locationHelper.isLocationEnabled()
-                                SosForegroundService.startService(context, victimId)
-                                isSosActive = true
+                            sasmexClient.simulateTestAlert {
+                                onStatusMessage("¡SIMULACRO ACTIVADO! VERIFICA EL TIEMPO DE 40s")
+                                countdownSeconds = 40
+                                show40sConfirmationDialog = true
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -346,6 +399,86 @@ fun VictimScreen(
                             color = MaterialTheme.colorScheme.outline
                         )
                     }
+                }
+            }
+        }
+    }
+
+    // Modal de Confirmación de Seguridad de 40 Segundos ("Estoy Bien")
+    if (show40sConfirmationDialog) {
+        Dialog(
+            onDismissRequest = { /* Bloquear cierre accidental */ },
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD54F),
+                        modifier = Modifier.size(56.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "🚨 ALERTA SÍSMICA SISMÓGRAFO 🚨",
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Confirmación de Estado de Salud:\nSe transmitirá señal SOS en:",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "$countdownSeconds seg",
+                        fontSize = 44.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFFF1744)
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            show40sConfirmationDialog = false
+                            sasmexClient.dismissAlert()
+                            onStatusMessage("Has confirmado que estás bien. Alerta y SOS cancelados.")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("¡ESTOY BIEN! CANCELAR SOS", fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Si no respondes en $countdownSeconds segundos, OropSOS activará el beacon de rescate automáticamente.",
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        color = Color.Gray
+                    )
                 }
             }
         }

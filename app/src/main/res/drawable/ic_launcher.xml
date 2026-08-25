@@ -1,26 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Fondo rojo oscuro circular/suave -->
+
+    <!-- Fondo Oscuro de Alta Resistencia con Bordes Suaves -->
     <path
-        android:fillColor="#B71C1C"
+        android:fillColor="#0D1117"
         android:pathData="M54,4 C26.38,4 4,26.38 4,54 C4,81.62 26.38,104 54,104 C81.62,104 104,81.62 104,54 C104,26.38 81.62,4 54,4 Z" />
-    
-    <!-- Escudo Rojo Emergencia brillante -->
+
+    <!-- Anillos Concéntricos de Radar Sísmico (Verde Neón Emergencia) -->
+    <path
+        android:strokeColor="#00E676"
+        android:strokeWidth="1.5"
+        android:pathData="M54,20 A34,34 0 1,0 54,88 A34,34 0 1,0 54,20 Z" />
+    <path
+        android:strokeColor="#00E676"
+        android:strokeWidth="1"
+        android:strokeLineJoin="round"
+        android:pathData="M54,32 A22,22 0 1,0 54,76 A22,22 0 1,0 54,32 Z" />
+
+    <!-- Escudo de Socorro Rojo Emergencia con Gradiente Visual -->
     <path
         android:fillColor="#D32F2F"
-        android:pathData="M54,14 L86,26 C86,58 54,90 54,90 C54,90 22,58 22,26 Z" />
-    
-    <!-- Borde interior dorado suave del escudo -->
-    <path
-        android:strokeColor="#FFCDD2"
-        android:strokeWidth="2"
-        android:pathData="M54,18 L82,28 C82,54 54,84 54,84 C54,84 26,54 26,28 Z" />
+        android:pathData="M54,24 L80,34 C80,62 54,86 54,86 C54,86 28,62 28,34 Z" />
 
-    <!-- Letra 'O' en color Blanco brillante -->
+    <!-- Borde de Protección Dorado/Blanco -->
+    <path
+        android:strokeColor="#FFD54F"
+        android:strokeWidth="2"
+        android:pathData="M54,27 L76,36 C76,58 54,80 54,80 C54,80 32,58 32,36 Z" />
+
+    <!-- Pulsación / Cruz de Rescate SOS Central -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,34 C44.06,34 36,41.16 36,50 C36,58.84 44.06,66 54,66 C63.94,66 72,58.84 72,50 C72,41.16 63.94,34 54,34 Z M54,42 C58.97,42 63,45.58 63,50 C63,54.42 58.97,58 54,58 C49.03,58 45,54.42 45,50 C45,45.58 49.03,42 54,42 Z" />
+        android:pathData="M50,42 L58,42 L58,50 L66,50 L66,58 L58,58 L58,66 L50,66 L50,58 L42,58 L42,50 L50,50 Z" />
+
+    <!-- Destello de Señal Vital Verde Neón en el Centro -->
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M54,51 C55.65,51 57,52.35 57,54 C57,55.65 55.65,57 54,57 C52.35,57 51,55.65 51,54 C51,52.35 52.35,51 54,51 Z" />
 </vector>
