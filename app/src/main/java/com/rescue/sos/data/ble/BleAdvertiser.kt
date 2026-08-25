@@ -11,6 +11,7 @@ import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
 import com.rescue.sos.data.location.LocationHelper
+import java.nio.ByteBuffer
 
 class BleAdvertiser(private val context: Context) {
 
@@ -26,6 +27,7 @@ class BleAdvertiser(private val context: Context) {
     companion object {
         private const val TAG = "BleAdvertiser"
         val SOS_SERVICE_UUID: ParcelUuid = ParcelUuid.fromString("0000180D-0000-1000-8000-00805F9B34FB")
+        const val MANUFACTURER_ID = 0x00E0 // ID de fabricante para difusión garantizada
     }
 
     fun isBleSupported(): Boolean {
@@ -57,6 +59,27 @@ class BleAdvertiser(private val context: Context) {
         return bluetoothAdapter?.isMultipleAdvertisementSupported == true
     }
 
+    /**
+     * Comprime el ID de la víctima y las coordenadas GPS en un buffer binario de 16 bytes
+     * para no superar el límite estricto de 31 bytes del paquete BLE primario.
+     */
+    private fun createCompactPayload(victimId: String, gpsCoords: String): ByteArray {
+        val cleanId = victimId.take(8).padEnd(8, ' ')
+        var lat = 0f
+        var lng = 0f
+        if (gpsCoords.contains(",")) {
+            val parts = gpsCoords.split(",")
+            lat = parts.getOrNull(0)?.trim()?.toFloatOrNull() ?: 0f
+            lng = parts.getOrNull(1)?.trim()?.toFloatOrNull() ?: 0f
+        }
+
+        val buffer = ByteBuffer.allocate(16)
+        buffer.put(cleanId.toByteArray(Charsets.UTF_8))
+        buffer.putFloat(lat)
+        buffer.putFloat(lng)
+        return buffer.array()
+    }
+
     @SuppressLint("MissingPermission")
     fun startSOS(victimId: String, onStatusChanged: (Boolean, String?) -> Unit) {
         val adapter = bluetoothAdapter
@@ -81,24 +104,29 @@ class BleAdvertiser(private val context: Context) {
             return
         }
 
-        // Configuración de emisión en MÁXIMA FRECUENCIA Y POTENCIA (LOW_LATENCY)
+        // Configuración de emisión de MÁXIMA FRECUENCIA Y POTENCIA
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .setConnectable(false)
+            .setConnectable(true) // Habilita compatibilidad universal con todos los chips BLE
             .setTimeout(0)
             .build()
 
         // Capturar la última ubicación GPS conocida en el instante del SOS
         val gpsCoords = locationHelper.getLastKnownLocation()
-        val fullDataString = "$victimId|$gpsCoords"
-        val payload = fullDataString.toByteArray(Charsets.UTF_8)
+        val compactPayload = createCompactPayload(victimId, gpsCoords)
 
+        // Paquete principal optimizado (menor a 31 bytes)
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false)
             .addServiceUuid(SOS_SERVICE_UUID)
-            .addServiceData(SOS_SERVICE_UUID, payload)
+            .addManufacturerData(MANUFACTURER_ID, compactPayload)
+            .build()
+
+        // Paquete de respuesta al escaneo (Scan Response)
+        val scanResponse = AdvertiseData.Builder()
+            .addServiceData(SOS_SERVICE_UUID, compactPayload)
             .build()
 
         stopSOS()
@@ -107,7 +135,7 @@ class BleAdvertiser(private val context: Context) {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
                 super.onStartSuccess(settingsInEffect)
                 isAdvertising = true
-                Log.d(TAG, "Beacon SOS iniciado exitosamente con ID y GPS: $fullDataString")
+                Log.d(TAG, "Beacon SOS iniciado exitosamente con ID: $victimId y GPS: $gpsCoords")
                 onStatusChanged(true, null)
             }
 
@@ -128,7 +156,7 @@ class BleAdvertiser(private val context: Context) {
         }
 
         try {
-            advertiser?.startAdvertising(settings, data, advertiseCallback)
+            advertiser?.startAdvertising(settings, data, scanResponse, advertiseCallback)
         } catch (e: SecurityException) {
             Log.e(TAG, "Permisos insuficientes para iniciar BLE Advertising", e)
             isAdvertising = false
