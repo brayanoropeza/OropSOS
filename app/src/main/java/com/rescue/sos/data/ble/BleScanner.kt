@@ -68,6 +68,8 @@ class BleScanner(private val context: Context) {
                 var victimId: String? = null
                 var locationCoords = "SIN_GPS"
 
+                val devName = record.deviceName
+
                 if (serviceData != null && serviceData.isNotEmpty()) {
                     val fullPayload = String(serviceData, Charsets.UTF_8)
                     if (fullPayload.contains("|")) {
@@ -77,8 +79,8 @@ class BleScanner(private val context: Context) {
                     } else {
                         victimId = fullPayload
                     }
-                } else if (hasSosUuid || (record.deviceName != null && record.deviceName.contains("VICTIMA"))) {
-                    victimId = record.deviceName ?: "VICTIMA_${result.device.address.takeLast(5).replace(":", "")}"
+                } else if (hasSosUuid || (devName != null && devName.contains("VICTIMA"))) {
+                    victimId = devName ?: "VICTIMA_${result.device.address.takeLast(5).replace(":", "")}"
                 }
 
                 if (victimId != null) {
